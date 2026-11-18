@@ -297,8 +297,8 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .price-row {
   display: grid;
-  grid-template-columns: 108px minmax(48px, 1fr) 112px 56px 48px 148px;
-  gap: 10px;
+  grid-template-columns: 100px 320px minmax(112px, 1fr) minmax(64px, 0.5fr) minmax(56px, 0.45fr) minmax(168px, 1.2fr);
+  column-gap: 18px;
   align-items: center;
   margin-top: 10px;
 }
@@ -328,8 +328,8 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .amount-row {
   display: grid;
-  grid-template-columns: 72px minmax(40px, 1fr) max-content 56px 56px 148px;
-  gap: 10px;
+  grid-template-columns: 76px 320px minmax(132px, 1.1fr) minmax(64px, 0.5fr) minmax(64px, 0.5fr) minmax(168px, 1.2fr);
+  column-gap: 18px;
   align-items: center;
   margin-top: 10px;
 }
