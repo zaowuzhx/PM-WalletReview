@@ -108,6 +108,7 @@ export function buyPriceBuckets(trades, results) {
       usdc: bucket.usdc,
       count: bucket.count,
       shares: bucket.shares,
+      avgPrice: bucket.shares > DUST ? bucket.usdc / bucket.shares : null,
       share: total > DUST ? bucket.usdc / total : 0,
       ...winOf(bucket.ids, results),
     });
@@ -127,16 +128,21 @@ function amountShareIndex(amount, max) {
 function shareBuckets(entries, results) {
   const max = entries.reduce((best, entry) => Math.max(best, entry.amount), 0);
   const groups = [[], [], [], [], []];
-  for (const entry of entries) groups[amountShareIndex(entry.amount, max)].push(entry.id);
+  for (const entry of entries) groups[amountShareIndex(entry.amount, max)].push(entry);
   const total = entries.length;
-  return AMOUNT_LABELS.map((label, index) => ({
-    label,
-    from: max * index * 0.2,
-    to: index === 4 ? max : max * (index + 1) * 0.2,
-    count: groups[index].length,
-    share: total > 0 ? groups[index].length / total : 0,
-    ...winOf(groups[index], results),
-  }));
+  return AMOUNT_LABELS.map((label, index) => {
+    const group = groups[index];
+    const sum = group.reduce((totalAmount, entry) => totalAmount + entry.amount, 0);
+    return {
+      label,
+      from: max * index * 0.2,
+      to: index === 4 ? max : max * (index + 1) * 0.2,
+      count: group.length,
+      avgAmount: group.length ? sum / group.length : null,
+      share: total > 0 ? group.length / total : 0,
+      ...winOf(group.map((entry) => entry.id), results),
+    };
+  });
 }
 
 export function buyAmountBuckets(trades, results) {

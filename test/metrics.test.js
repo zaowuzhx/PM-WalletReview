@@ -108,6 +108,18 @@ test("buy amount is grouped by price in steps of 0.2", () => {
   assert.ok(Math.abs(rows.reduce((sum, row) => sum + row.share, 0) - 1) < 1e-9);
 });
 
+test("price band average is weighted by shares", () => {
+  const rows = buyPriceBuckets([
+    { side: "BUY", price: 0.1, size: 10 },
+    { side: "BUY", price: 0.15, size: 30 },
+    { side: "SELL", price: 0.1, size: 100 },
+  ]);
+  const low = rows.find((row) => row.label === "小于 0.20");
+  const empty = rows.find((row) => row.label === "0.20–0.40");
+  assert.ok(Math.abs(low.avgPrice - 0.1375) < 1e-9);
+  assert.equal(empty.avgPrice, null);
+});
+
 test("buy amount bands are 20 percent of the largest buy", () => {
   const trades = [
     { conditionId: "A", side: "BUY", price: 0.5, size: 40 },
@@ -130,6 +142,11 @@ test("buy amount bands are 20 percent of the largest buy", () => {
   assert.equal(buckets.markets.reduce((sum, row) => sum + row.count, 0), 4);
   assert.equal(buckets.trades.reduce((sum, row) => sum + row.count, 0), 5);
   assert.ok(Math.abs(buckets.trades.reduce((sum, row) => sum + row.share, 0) - 1) < 1e-9);
+  assert.ok(Math.abs(markets.get("0–20%").avgAmount - 10) < 1e-9);
+  assert.ok(Math.abs(markets.get("80–100%").avgAmount - 100) < 1e-9);
+  assert.equal(markets.get("40–60%").avgAmount, null);
+  assert.ok(Math.abs(fills.get("20–40%").avgAmount - 20) < 1e-9);
+  assert.ok(Math.abs(fills.get("80–100%").avgAmount - 90) < 1e-9);
 });
 
 test("bucket win rate counts each decided market once", () => {

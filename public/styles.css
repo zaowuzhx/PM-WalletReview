@@ -312,7 +312,7 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .price-row {
   display: grid;
-  grid-template-columns: 100px 320px minmax(112px, 1fr) minmax(64px, 0.5fr) minmax(56px, 0.45fr) minmax(168px, 1.2fr);
+  grid-template-columns: 100px 320px minmax(112px, 1fr) minmax(72px, 0.55fr) minmax(64px, 0.5fr) minmax(56px, 0.45fr) minmax(168px, 1.2fr);
   column-gap: 18px;
   align-items: center;
   margin-top: 10px;
@@ -328,7 +328,7 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .price-label { font-size: 14px; font-variant-numeric: tabular-nums; }
 
-.price-amount, .price-share, .price-count, .price-win {
+.price-amount, .price-avg, .price-share, .price-count, .price-win {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -343,7 +343,7 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .amount-row {
   display: grid;
-  grid-template-columns: 76px 320px minmax(132px, 1.1fr) minmax(64px, 0.5fr) minmax(64px, 0.5fr) minmax(168px, 1.2fr);
+  grid-template-columns: 76px 320px minmax(132px, 1.1fr) minmax(96px, 0.7fr) minmax(64px, 0.5fr) minmax(64px, 0.5fr) minmax(168px, 1.2fr);
   column-gap: 18px;
   align-items: center;
   margin-top: 10px;
@@ -359,7 +359,7 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .amount-label { font-size: 14px; font-variant-numeric: tabular-nums; }
 
-.amount-range, .amount-count, .amount-share, .amount-win {
+.amount-range, .amount-avg, .amount-count, .amount-share, .amount-win {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -476,20 +476,24 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
   .bar-row.bar-head span { text-align: left; }
   .bar-row.bar-head span:nth-child(-n+2) { display: none; }
   .bar-win { grid-column: 1 / -1; text-align: left; }
-  .price-row { grid-template-columns: 1fr auto auto; }
+  .price-row { grid-template-columns: 1fr 1fr; }
   .price-row:not(.price-head) .price-label { grid-column: 1 / -1; order: 1; }
-  .price-amount, .price-share, .price-count { order: 2; }
-  .price-win, .amount-win { grid-column: 1 / -1; order: 3; text-align: right; }
-  .price-row .bar-track, .amount-row .bar-track { grid-column: 1 / -1; order: 4; }
-  .price-head, .amount-head { grid-template-columns: 1fr auto auto; }
+  .price-amount, .price-avg { order: 2; }
+  .price-share, .price-count { order: 3; }
+  .price-win { grid-column: 1 / -1; order: 4; text-align: right; }
+  .amount-win { grid-column: 1 / -1; order: 4; text-align: right; }
+  .price-row .bar-track { grid-column: 1 / -1; order: 5; }
+  .amount-row .bar-track { grid-column: 1 / -1; order: 5; }
+  .price-head, .amount-head { grid-template-columns: 1fr 1fr; }
   .price-head span:nth-child(-n+2),
   .amount-head span:nth-child(-n+2) { display: none; }
   .price-head span, .amount-head span { text-align: right; }
-  .price-head span:nth-child(6),
-  .amount-head span:nth-child(6) { grid-column: 1 / -1; }
-  .amount-row { grid-template-columns: 1fr auto auto; }
+  .price-head span:nth-child(7),
+  .amount-head span:nth-child(7) { grid-column: 1 / -1; }
+  .amount-row { grid-template-columns: 1fr 1fr; }
   .amount-row:not(.amount-head) .amount-label { grid-column: 1 / -1; order: 1; }
-  .amount-range, .amount-count, .amount-share { order: 2; }
+  .amount-range, .amount-avg { order: 2; }
+  .amount-count, .amount-share { order: 3; }
   .bar-track { grid-column: 1 / -1; order: 3; }
   .summary dl div { grid-template-columns: 72px 1fr; }
   .split .num, .hero, .fraction { font-size: 34px; }
