@@ -159,14 +159,21 @@ export function buyAmountBuckets(trades, results) {
   };
 }
 
+export function tradesWithinDays(trades, days, nowSeconds = Date.now() / 1000) {
+  if (!(days > 0)) return trades;
+  const cutoff = nowSeconds - days * 86400;
+  return trades.filter((trade) => {
+    const time = Number(trade.timestamp);
+    return Number.isFinite(time) && time >= cutoff;
+  });
+}
+
 export function tradesAboveNotional(trades, minimum) {
   if (!(minimum > 0)) return trades;
-  const qualified = new Set();
-  for (const trade of trades) {
-    const amount = Number(trade.price) * Number(trade.size);
-    if (amount > minimum) qualified.add(String(trade.conditionId || "").toLowerCase());
-  }
-  return trades.filter((trade) => qualified.has(String(trade.conditionId || "").toLowerCase()));
+  return trades.filter((trade) => {
+    if (String(trade.side || "").toUpperCase() !== "BUY") return false;
+    return Number(trade.price) * Number(trade.size) > minimum;
+  });
 }
 
 export function marketDomain(marketInfo, conditionId) {

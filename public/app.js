@@ -1,5 +1,5 @@
 import { loadReport } from "./api.js";
-import { computeReport, marketDomain, parseAddress, tradesAboveNotional } from "./metrics.js";
+import { computeReport, marketDomain, parseAddress, tradesAboveNotional, tradesWithinDays } from "./metrics.js";
 
 const form = document.querySelector("#search");
 const input = document.querySelector("#address");
@@ -14,6 +14,8 @@ let currentData = null;
 let fullStats = null;
 let selectedDomain = null;
 let minNotional = null;
+let windowDays = null;
+const TIME_WINDOWS = [30, 60, 90, 180];
 let currentCategories = [];
 let currentWinners = [];
 let currentVolume = [];
@@ -344,8 +346,9 @@ function tradeWindow(trades) {
 }
 
 function viewFor(domain) {
-  const universe = tradesAboveNotional(currentData.trades, minNotional);
-  const filtered = minNotional > 0;
+  const timed = tradesWithinDays(currentData.trades, windowDays);
+  const universe = tradesAboveNotional(timed, minNotional);
+  const filtered = minNotional > 0 || windowDays > 0;
   const full = filtered ? computeReport(universe, currentData.marketInfo) : fullStats;
   if (domain == null) {
     if (!filtered) {
@@ -361,6 +364,23 @@ function viewFor(domain) {
   }
   const trades = universe.filter((trade) => marketDomain(currentData.marketInfo, trade.conditionId) === domain);
   return { stats: computeReport(trades, currentData.marketInfo), full, ...tradeWindow(trades) };
+}
+
+function filterHelp(data) {
+  const parts = [];
+  if (windowDays > 0) {
+    parts.push(`当前只统计最近 ${windowDays} 天内的成交。`);
+    const cutoff = Date.now() / 1000 - windowDays * 86400;
+    if (data.hasMore && data.from != null && data.from > cutoff) {
+      parts.push(`已加载的成交最早只到 ${clock.format(data.from * 1000)}，没有覆盖完整的 ${windowDays} 天。`);
+    }
+  }
+  if (minNotional > 0) {
+    parts.push(`只保留单笔买入金额大于 ${money.format(minNotional)} 的成交。卖出不计入，同一市场里更小的买入也不计入。`);
+  } else if (!(windowDays > 0)) {
+    parts.push("金额留空表示不限制。填写后只统计单笔买入金额大于这个数的成交，等于该数值不算。");
+  }
+  return parts.join("");
 }
 
 function applyMinNotional() {
@@ -411,7 +431,7 @@ function renderPerformance(data, stats, domain) {
           <h3>账户与活跃</h3>
           <p>${scoped
             ? `注册日期来自整个账户，不随领域变化。活跃按北京时间，只统计这个领域${data.hasMore ? "，并且只在最近 5,000 笔之内" : ""}。`
-            : `注册日期来自账户资料。活跃按北京时间，当天至少有一笔买入或卖出。${data.hasMore ? "活跃天数和首次成交只统计最近 5,000 笔。" : ""}`}${minNotional > 0 ? `只包含至少有一笔成交大于 ${money.format(minNotional)} 的市场。` : ""}</p>
+            : `注册日期来自账户资料。活跃按北京时间，当天至少有一笔买入或卖出。${data.hasMore ? "活跃天数和首次成交只统计最近 5,000 笔。" : ""}`}${windowDays > 0 ? `活跃和首次成交只看最近 ${windowDays} 天。` : ""}${minNotional > 0 ? `活跃和首次成交只看单笔买入大于 ${money.format(minNotional)} 的成交。` : ""}</p>
         </header>
         <div class="split three">
           <div>
@@ -427,9 +447,11 @@ function renderPerformance(data, stats, domain) {
           <div>
             <span class="label">首次成交距今</span>
             <strong class="num date">${formatDuration(firstAge)}</strong>
-            <p class="muted">${scoped
-              ? (data.hasMore ? "最近 5,000 笔里，这个领域最早的一笔" : "这个领域的第一笔成交")
-              : (data.hasMore ? "这 5,000 笔里最早的一笔" : "第一笔成交")}</p>
+            <p class="muted">${windowDays > 0
+              ? `最近 ${windowDays} 天里${scoped ? "，这个领域" : ""}最早的一笔`
+              : scoped
+                ? (data.hasMore ? "最近 5,000 笔里，这个领域最早的一笔" : "这个领域的第一笔成交")
+                : (data.hasMore ? "这 5,000 笔里最早的一笔" : "第一笔成交")}</p>
           </div>
         </div>
       </article>
@@ -689,9 +711,10 @@ function render(data, full, view, domain, scroll) {
   const overallRate = overall.decided
     ? `${overall.wins.toLocaleString("zh-CN")}/${overall.decided.toLocaleString("zh-CN")}（${percent.format(overall.wins / overall.decided)}）`
     : "—";
-  const amountText = minNotional > 0 ? `单笔大于 ${money.format(minNotional)}` : "";
-  const kicker = scoped || amountText
-    ? [scopeName, amountText, `${view.tradeCount.toLocaleString("zh-CN")} 笔`].filter(Boolean).join(" · ")
+  const amountText = minNotional > 0 ? `单笔买入大于 ${money.format(minNotional)}` : "";
+  const timeText = windowDays > 0 ? `最近${windowDays}天` : "";
+  const kicker = scoped || amountText || timeText
+    ? [scopeName, timeText, amountText, `${view.tradeCount.toLocaleString("zh-CN")} 笔`].filter(Boolean).join(" · ")
     : (data.hasMore ? "最近 5,000 笔成交" : `全部 ${data.tradeCount.toLocaleString("zh-CN")} 笔成交`);
 
   report.hidden = false;
@@ -718,14 +741,21 @@ function render(data, full, view, domain, scroll) {
     </section>
 
     <form class="amount-filter" data-amount-filter>
-      <label for="min-notional">单笔成交大于</label>
-      <input id="min-notional" data-min-notional type="number" min="0" step="any" inputmode="decimal" value="${minNotional == null ? "" : escapeHtml(String(minNotional))}" placeholder="金额">
-      <span>美元</span>
-      <button type="submit">应用</button>
-      ${minNotional > 0 ? `<button type="button" data-clear-min>清除</button>` : ""}
-      <p>${minNotional > 0
-        ? `当前只统计至少有一笔成交金额大于 ${money.format(minNotional)} 的市场。买入和卖出都算，达标后该市场的全部成交都计入。`
-        : "留空表示不限制。某个市场里只要有一笔成交金额大于这个数，该市场的全部成交都会计入下面的统计。"}</p>
+      <div class="filter-line">
+        <label for="min-notional">单笔买入大于</label>
+        <input id="min-notional" data-min-notional type="number" min="0" step="any" inputmode="decimal" value="${minNotional == null ? "" : escapeHtml(String(minNotional))}" placeholder="金额">
+        <span>美元</span>
+        <button type="submit">应用</button>
+        ${minNotional > 0 ? `<button type="button" data-clear-min>清除</button>` : ""}
+      </div>
+      <div class="filter-line">
+        <span>时间范围</span>
+        <div class="filter-picks">
+          <button type="button" data-window-days="" aria-pressed="${windowDays == null ? "true" : "false"}">全部</button>
+          ${TIME_WINDOWS.map((days) => `<button type="button" data-window-days="${days}" aria-pressed="${windowDays === days ? "true" : "false"}">最近${days}天</button>`).join("")}
+        </div>
+      </div>
+      <p>${filterHelp(data)}</p>
     </form>
 
     ${renderDomainTabs(full.categories, domain)}
@@ -737,7 +767,7 @@ function render(data, full, view, domain, scroll) {
       </header>
       <p class="scope-line">${scoped
         ? `当前只看${escapeHtml(scopeName)}。页头和下面的统计都只含这个领域，占比的分母也是这个领域自己的合计。注册日期仍是整个账户。`
-        : "当前是全部领域。"}${amountText ? `金额筛选下，领域占比也只在这些市场之间计算。` : ""}</p>
+        : "当前是全部领域。"}${timeText ? `时间筛选下，只含最近 ${windowDays} 天的成交。` : ""}${amountText ? `金额筛选下，只含单笔买入大于 ${money.format(minNotional)} 的成交。` : ""}</p>
       <div class="bar-row bar-head">
         <span></span>
         <span></span>
@@ -823,7 +853,8 @@ function render(data, full, view, domain, scroll) {
         <li>市场领域上面的标签，或领域栏里的一行，都会切换查看范围。页头的成交、市场、时间范围，以及下面的买入、持仓、盈亏、价格分布、金额分布和前十名，都只重算这个领域。盈利占比和成交占比的分母换成这个领域自己的合计。再点一次，或点「全部」，回到全部领域。注册日期不随领域变化。领域栏本身始终按全部领域计算。</li>
         <li>买入价格分布只统计买入。价格每 0.20 一档：小于 0.20，然后 0.20–0.40、0.40–0.60，以此类推。正好等于分界价格时归入下一档，1.00 仍算在 0.80–1.00。金额是价格 × 份额，占比的分母是当前范围内全部买入金额。胜率按市场算：这一档里有过买入的市场里，已结束且赚钱的占比。未结束不进分母。同一市场的买入落在多档时，每一档都计入。</li>
         <li>买入金额分布只统计买入，卖出不计入。市场按该市场全部买入合计，交易按每一笔买入。两张表各自用当前范围内的最大买入金额做 100%，每 20% 一档。正好等于 20%、40%、60%、80% 时归入下一档，最大的一笔留在 80–100%。没有买入的市场不计入市场数。胜率口径与价格分布相同。按市场时，市场只在自己的金额档里；按交易时，这一档里有过买入的市场计入该档。</li>
-        <li>填写「单笔成交大于」后，只保留至少有一笔成交金额大于该数值的市场。金额是价格 × 份额，买入和卖出都算。只要有一笔达标，这个市场里的全部成交都计入。等于该数值不算。清除或留空后恢复全部市场。</li>
+        <li>填写「单笔买入大于」后，只保留买入金额大于该数值的成交。金额是价格 × 份额。卖出不计入，同一市场里金额没有超过该数值的买入也不计入。等于该数值不算。清除或留空后恢复全部成交。</li>
+        <li>时间范围和金额筛选同一层。可选最近 30、60、90、180 天，从现在往前算，只保留这段时间里的成交。点「全部」取消时间限制。它和金额筛选可以一起用：先按时间留下成交，再只保留单笔买入大于该金额的成交。已加载的成交如果盖不满所选天数，就只统计已有的部分。注册日期不随时间变化。</li>
         <li>持有时长里，卖出视为离场；结算时还没卖掉的份额，用结算时间离场。未结算的持仓不计入平均。</li>
         <li>持有至结算要求：该市场已结算，窗口内有买入，且从第一笔买入到结算时刻没有出现任何卖出。卖掉一部分也算卖出。</li>
         <li>结算状态来自 Polymarket 市场资料。成交记录本身不包含结算时间。</li>
@@ -859,6 +890,7 @@ async function analyze(raw, options = {}) {
   }
   const keepDomain = options.refresh && currentData?.address === address ? selectedDomain : null;
   const keepMin = options.refresh && currentData?.address === address ? minNotional : null;
+  const keepWindow = options.refresh && currentData?.address === address ? windowDays : null;
   controller?.abort();
   controller = new AbortController();
   const signal = controller.signal;
@@ -875,6 +907,7 @@ async function analyze(raw, options = {}) {
       ? keepDomain
       : null;
     minNotional = keepMin;
+    windowDays = keepWindow;
     showStatus("");
     showView(true);
   } catch (error) {
@@ -899,6 +932,15 @@ report.addEventListener("click", (event) => {
   if (event.target.closest("[data-clear-min]")) {
     minNotional = null;
     showView(false);
+    return;
+  }
+  const windowButton = event.target.closest("button[data-window-days]");
+  if (windowButton) {
+    const next = windowButton.dataset.windowDays ? Number(windowButton.dataset.windowDays) : null;
+    if (next !== windowDays) {
+      windowDays = next;
+      showView(false);
+    }
     return;
   }
   if (event.target.closest("[data-domain-all]")) {

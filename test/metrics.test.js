@@ -6,6 +6,7 @@ import {
   computeReport,
   domainForMarket,
   tradesAboveNotional,
+  tradesWithinDays,
   domainFromTags,
   marketDomain,
   parseAddress,
@@ -51,17 +52,34 @@ test("domain comes only from a gamma category tag", () => {
   assert.equal(domainForMarket({ events: [{ tags: [{ slug: "games" }, { slug: "sports" }] }] }), "体育");
 });
 
-test("one fill above the amount keeps every trade in that market", () => {
+test("amount filter keeps only buys larger than the threshold", () => {
   const trades = [
     { conditionId: "A", side: "BUY", price: 0.5, size: 10 },
-    { conditionId: "A", side: "SELL", price: 0.4, size: 10 },
-    { conditionId: "b", side: "BUY", price: 0.2, size: 10 },
-    { conditionId: "b", side: "SELL", price: 1, size: 3 },
+    { conditionId: "A", side: "SELL", price: 0.9, size: 10 },
+    { conditionId: "A", side: "BUY", price: 0.2, size: 10 },
+    { conditionId: "b", side: "BUY", price: 1, size: 4 },
+    { conditionId: "b", side: "SELL", price: 1, size: 5 },
   ];
   const kept = tradesAboveNotional(trades, 4);
-  assert.deepEqual(kept.map((trade) => trade.conditionId), ["A", "A"]);
+  assert.deepEqual(kept.map((trade) => [trade.conditionId, trade.side]), [["A", "BUY"]]);
   assert.equal(tradesAboveNotional(trades, 5).length, 0);
   assert.equal(tradesAboveNotional(trades, 0), trades);
+});
+
+test("a time window drops fills outside it and keeps the recent fill in the same market", () => {
+  const now = 1_000_000;
+  const day = 86400;
+  const trades = [
+    { conditionId: "A", timestamp: now - 10 * day },
+    { conditionId: "A", timestamp: now - 40 * day },
+    { conditionId: "B", timestamp: now - 40 * day },
+    { conditionId: "C", timestamp: now },
+    { conditionId: "D" },
+  ];
+  assert.deepEqual(tradesWithinDays(trades, 30, now).map((trade) => trade.conditionId), ["A", "C"]);
+  assert.equal(tradesWithinDays(trades, 0, now), trades);
+  assert.equal(tradesWithinDays([{ conditionId: "E", timestamp: now - 30 * day }], 30, now).length, 1);
+  assert.equal(tradesWithinDays([{ conditionId: "F", timestamp: now - 30 * day - 1 }], 30, now).length, 0);
 });
 
 test("buy amount is grouped by price in steps of 0.2", () => {

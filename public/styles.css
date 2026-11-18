@@ -253,6 +253,21 @@ td.figure, th.figure { text-align: right; font-variant-numeric: tabular-nums; wh
 
 .amount-filter button { height: 36px; padding: 0 14px; }
 
+.filter-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+}
+
+.filter-picks { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.filter-picks button[aria-pressed="true"] {
+  background: var(--ink);
+  color: #f7f3ea;
+}
+
 .amount-filter p {
   flex-basis: 100%;
   margin: 0;
