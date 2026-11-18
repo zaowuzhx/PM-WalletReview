@@ -297,7 +297,7 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .price-row {
   display: grid;
-  grid-template-columns: 108px 1fr 108px 64px 48px;
+  grid-template-columns: 108px minmax(48px, 1fr) 112px 56px 48px 148px;
   gap: 10px;
   align-items: center;
   margin-top: 10px;
@@ -313,12 +313,13 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .price-label { font-size: 14px; font-variant-numeric: tabular-nums; }
 
-.price-amount, .price-share, .price-count {
+.price-amount, .price-share, .price-count, .price-win {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.price-share, .price-count { color: var(--muted); }
+.price-share, .price-count, .price-win { color: var(--muted); }
 
 .amount-block { margin-top: 22px; }
 .amount-block + .amount-block { padding-top: 16px; border-top: 1px solid var(--line); }
@@ -327,7 +328,7 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .amount-row {
   display: grid;
-  grid-template-columns: 84px minmax(48px, 1fr) max-content 64px 64px;
+  grid-template-columns: 72px minmax(40px, 1fr) max-content 56px 56px 148px;
   gap: 10px;
   align-items: center;
   margin-top: 10px;
@@ -343,13 +344,13 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
 
 .amount-label { font-size: 14px; font-variant-numeric: tabular-nums; }
 
-.amount-range, .amount-count, .amount-share {
+.amount-range, .amount-count, .amount-share, .amount-win {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.amount-count, .amount-share { color: var(--muted); }
+.amount-count, .amount-share, .amount-win { color: var(--muted); }
 
 .bar-count, .bar-share, .bar-win { text-align: right; font-variant-numeric: tabular-nums; }
 .bar-share, .bar-win { color: var(--muted); }
@@ -463,17 +464,17 @@ button.bar-row[aria-pressed="true"]:hover { background: #efe4d2; }
   .price-row { grid-template-columns: 1fr auto auto; }
   .price-row:not(.price-head) .price-label { grid-column: 1 / -1; order: 1; }
   .price-amount, .price-share, .price-count { order: 2; }
-  .price-row .bar-track { grid-column: 1 / -1; order: 3; }
-  .price-head { grid-template-columns: 1fr auto auto; }
-  .price-head span:nth-child(-n+2) { display: none; }
-  .price-head span { text-align: right; }
+  .price-win, .amount-win { grid-column: 1 / -1; order: 3; text-align: right; }
+  .price-row .bar-track, .amount-row .bar-track { grid-column: 1 / -1; order: 4; }
+  .price-head, .amount-head { grid-template-columns: 1fr auto auto; }
+  .price-head span:nth-child(-n+2),
+  .amount-head span:nth-child(-n+2) { display: none; }
+  .price-head span, .amount-head span { text-align: right; }
+  .price-head span:nth-child(6),
+  .amount-head span:nth-child(6) { grid-column: 1 / -1; }
   .amount-row { grid-template-columns: 1fr auto auto; }
   .amount-row:not(.amount-head) .amount-label { grid-column: 1 / -1; order: 1; }
   .amount-range, .amount-count, .amount-share { order: 2; }
-  .amount-row .bar-track { grid-column: 1 / -1; order: 3; }
-  .amount-head { grid-template-columns: 1fr auto auto; }
-  .amount-head span:nth-child(-n+2) { display: none; }
-  .amount-head span { text-align: right; }
   .bar-track { grid-column: 1 / -1; order: 3; }
   .summary dl div { grid-template-columns: 72px 1fr; }
   .split .num, .hero, .fraction { font-size: 34px; }

@@ -114,6 +114,42 @@ test("buy amount bands are 20 percent of the largest buy", () => {
   assert.ok(Math.abs(buckets.trades.reduce((sum, row) => sum + row.share, 0) - 1) < 1e-9);
 });
 
+test("bucket win rate counts each decided market once", () => {
+  const trades = [
+    { conditionId: "A", side: "BUY", price: 0.1, size: 10 },
+    { conditionId: "A", side: "BUY", price: 0.9, size: 10 },
+    { conditionId: "B", side: "BUY", price: 0.9, size: 100 },
+    { conditionId: "C", side: "BUY", price: 0.9, size: 100 },
+  ];
+  const results = new Map([
+    ["a", { decided: true, win: true }],
+    ["b", { decided: true, win: false }],
+    ["c", { decided: false, win: false }],
+  ]);
+  const prices = buyPriceBuckets(trades, results);
+  const low = prices.find((row) => row.label === "小于 0.20");
+  const high = prices.find((row) => row.label === "0.80–1.00");
+  assert.equal(low.markets, 1);
+  assert.equal(low.wins, 1);
+  assert.equal(low.decided, 1);
+  assert.equal(high.markets, 3);
+  assert.equal(high.decided, 2);
+  assert.equal(high.wins, 1);
+  const amounts = buyAmountBuckets(trades, results);
+  const marketLow = amounts.markets.find((row) => row.label === "0–20%");
+  const marketHigh = amounts.markets.find((row) => row.label === "80–100%");
+  assert.equal(marketLow.wins, 1);
+  assert.equal(marketLow.decided, 1);
+  assert.equal(marketHigh.markets, 2);
+  assert.equal(marketHigh.decided, 1);
+  assert.equal(marketHigh.wins, 0);
+  const tradeHigh = amounts.trades.find((row) => row.label === "80–100%");
+  assert.equal(tradeHigh.count, 2);
+  assert.equal(tradeHigh.markets, 2);
+  assert.equal(tradeHigh.decided, 1);
+  assert.equal(tradeHigh.wins, 0);
+});
+
 test("legacy closed markets count as settled, proposed markets do not", () => {
   assert.equal(settlementOf({ umaResolutionStatus: "resolved", closedTime: "2026-11-08 16:29:18+00" }).settled, true);
   assert.equal(settlementOf({ umaResolutionStatus: "proposed", closed: true, closedTime: "2026-11-08 16:29:18+00" }).settled, false);

@@ -63,7 +63,24 @@ export function priceBucketLabel(index) {
   return `${from}–${to}`;
 }
 
-export function buyPriceBuckets(trades) {
+function winOf(ids, results) {
+  const seen = new Set();
+  let markets = 0;
+  let decided = 0;
+  let wins = 0;
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    markets += 1;
+    const result = results?.get(id);
+    if (!result?.decided) continue;
+    decided += 1;
+    if (result.win) wins += 1;
+  }
+  return { markets, decided, wins, winRate: decided > 0 ? wins / decided : null };
+}
+
+export function buyPriceBuckets(trades, results) {
   const buckets = new Map();
   let total = 0;
   for (const trade of trades) {
@@ -73,10 +90,11 @@ export function buyPriceBuckets(trades) {
     if (!(size > 0)) continue;
     const usdc = price * size;
     const index = priceBucketIndex(price);
-    const bucket = buckets.get(index) || { usdc: 0, count: 0, shares: 0 };
+    const bucket = buckets.get(index) || { usdc: 0, count: 0, shares: 0, ids: [] };
     bucket.usdc += usdc;
     bucket.count += 1;
     bucket.shares += size;
+    bucket.ids.push(String(trade.conditionId || "").toLowerCase());
     buckets.set(index, bucket);
     total += usdc;
   }
@@ -84,13 +102,14 @@ export function buyPriceBuckets(trades) {
   const last = Math.max(4, highest);
   const rows = [];
   for (let index = 0; index <= last; index += 1) {
-    const bucket = buckets.get(index) || { usdc: 0, count: 0, shares: 0 };
+    const bucket = buckets.get(index) || { usdc: 0, count: 0, shares: 0, ids: [] };
     rows.push({
       label: priceBucketLabel(index),
       usdc: bucket.usdc,
       count: bucket.count,
       shares: bucket.shares,
       share: total > DUST ? bucket.usdc / total : 0,
+      ...winOf(bucket.ids, results),
     });
   }
   return rows;
@@ -105,21 +124,22 @@ function amountShareIndex(amount, max) {
   return Math.min(4, Math.floor(milli / 200));
 }
 
-function shareBuckets(amounts) {
-  const max = amounts.reduce((best, amount) => Math.max(best, amount), 0);
-  const counts = [0, 0, 0, 0, 0];
-  for (const amount of amounts) counts[amountShareIndex(amount, max)] += 1;
-  const total = amounts.length;
+function shareBuckets(entries, results) {
+  const max = entries.reduce((best, entry) => Math.max(best, entry.amount), 0);
+  const groups = [[], [], [], [], []];
+  for (const entry of entries) groups[amountShareIndex(entry.amount, max)].push(entry.id);
+  const total = entries.length;
   return AMOUNT_LABELS.map((label, index) => ({
     label,
     from: max * index * 0.2,
     to: index === 4 ? max : max * (index + 1) * 0.2,
-    count: counts[index],
-    share: total > 0 ? counts[index] / total : 0,
+    count: groups[index].length,
+    share: total > 0 ? groups[index].length / total : 0,
+    ...winOf(groups[index], results),
   }));
 }
 
-export function buyAmountBuckets(trades) {
+export function buyAmountBuckets(trades, results) {
   const marketTotals = new Map();
   const tradeAmounts = [];
   for (const trade of trades) {
@@ -129,13 +149,13 @@ export function buyAmountBuckets(trades) {
     if (!(size > 0)) continue;
     const usdc = price * size;
     if (!(usdc > DUST)) continue;
-    tradeAmounts.push(usdc);
     const id = String(trade.conditionId || "").toLowerCase();
+    tradeAmounts.push({ amount: usdc, id });
     marketTotals.set(id, (marketTotals.get(id) || 0) + usdc);
   }
   return {
-    markets: shareBuckets([...marketTotals.values()]),
-    trades: shareBuckets(tradeAmounts),
+    markets: shareBuckets([...marketTotals].map(([id, amount]) => ({ amount, id })), results),
+    trades: shareBuckets(tradeAmounts, results),
   };
 }
 
@@ -344,6 +364,12 @@ function scoreMarkets(rows, infoOf) {
     if (market.pnl > DUST) score.wins += 1;
   }
 
+  const marketResults = new Map();
+  for (const market of markets.values()) {
+    const decided = !market.open && market.buyCost > DUST;
+    marketResults.set(market.conditionId, { decided, win: decided && market.pnl > DUST });
+  }
+
   const wins = decidedMarkets.filter((market) => market.pnl > DUST);
   const losses = decidedMarkets.filter((market) => market.pnl < -DUST);
   const breakeven = decidedMarkets.length - wins.length - losses.length;
@@ -433,6 +459,7 @@ function scoreMarkets(rows, infoOf) {
     sampleDays,
     topWinners,
     topVolume,
+    marketResults,
   };
 }
 
@@ -579,6 +606,9 @@ export function computeReport(trades, marketInfo) {
   }
 
   const performance = scoreMarkets(rows, infoOf);
+  const priceBuckets = buyPriceBuckets(rows, performance.marketResults);
+  const amountBuckets = buyAmountBuckets(rows, performance.marketResults);
+  delete performance.marketResults;
   const marketCount = conditions.size;
   const categories = [...domainCounts.entries()]
     .map(([name, count]) => {
@@ -603,8 +633,8 @@ export function computeReport(trades, marketInfo) {
     sells,
     avgBuyCost: buys.shares > 0 ? buys.usdc / buys.shares : null,
     avgBuyAmount: buys.count > 0 ? buys.usdc / buys.count : null,
-    priceBuckets: buyPriceBuckets(rows),
-    amountBuckets: buyAmountBuckets(rows),
+    priceBuckets,
+    amountBuckets,
     avgHoldSeconds: holdShares > 0 ? holdSecondsWeighted / holdShares : null,
     holdShares,
     openShares,

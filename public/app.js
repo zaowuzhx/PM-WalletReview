@@ -561,13 +561,18 @@ function formatWinRate(item) {
   return `${item.wins.toLocaleString("zh-CN")}/${item.decided.toLocaleString("zh-CN")}（${percent.format(item.winRate)}）`;
 }
 
+function formatBucketWin(row) {
+  if (!row.markets) return "—";
+  return formatWinRate(row);
+}
+
 function renderPriceBuckets(stats) {
   const rows = stats.priceBuckets || [];
   return `
     <section class="panel" id="price-bands">
       <header>
         <h3>买入价格分布</h3>
-        <p>按每笔买入的价格分组，每 0.20 一档。小于 0.20 不含 0.20；之后每档含下限、不含上限，0.80–1.00 含 1.00。金额是价格 × 份额，占比的分母是当前范围内的全部买入金额。</p>
+        <p>按每笔买入的价格分组，每 0.20 一档。小于 0.20 不含 0.20；之后每档含下限、不含上限，0.80–1.00 含 1.00。金额是价格 × 份额，占比的分母是当前范围内的全部买入金额。胜率按市场算：这一档里有过买入、并且已经结束的市场里，赚钱的占多少。未结束不进分母。同一市场可以出现在多档。</p>
       </header>
       <div class="price-row price-head">
         <span>价格</span>
@@ -575,6 +580,7 @@ function renderPriceBuckets(stats) {
         <span>买入金额</span>
         <span>占比</span>
         <span>笔数</span>
+        <span>胜率</span>
       </div>
       ${rows.map((row) => `
         <div class="price-row">
@@ -583,6 +589,7 @@ function renderPriceBuckets(stats) {
           <span class="price-amount">${money.format(row.usdc)}</span>
           <span class="price-share">${percent.format(row.share)}</span>
           <span class="price-count">${row.count.toLocaleString("zh-CN")}</span>
+          <span class="price-win">${formatBucketWin(row)}</span>
         </div>
       `).join("")}
     </section>
@@ -597,6 +604,7 @@ function renderAmountTable(rows, countLabel) {
       <span>金额范围</span>
       <span>${countLabel}</span>
       <span>占比</span>
+      <span>胜率</span>
     </div>
     ${rows.map((row) => `
       <div class="amount-row">
@@ -605,6 +613,7 @@ function renderAmountTable(rows, countLabel) {
         <span class="amount-range">${moneyWhole.format(row.from)}–${moneyWhole.format(row.to)}</span>
         <span class="amount-count">${row.count.toLocaleString("zh-CN")}</span>
         <span class="amount-share">${percent.format(row.share)}</span>
+        <span class="amount-win">${formatBucketWin(row)}</span>
       </div>
     `).join("")}
   `;
@@ -616,7 +625,7 @@ function renderAmountBuckets(stats) {
     <section class="panel" id="amount-bands">
       <header>
         <h3>买入金额分布</h3>
-        <p>金额是价格 × 份额。下面分市场和单笔两张表，各自按当前范围内的最大买入金额分成五档，每 20% 一档。正好等于分界的归入下一档，最大的仍在 80–100%。占比是该档的市场数或笔数，除以这一张表的合计。</p>
+        <p>金额是价格 × 份额。下面分市场和单笔两张表，各自按当前范围内的最大买入金额分成五档，每 20% 一档。正好等于分界的归入下一档，最大的仍在 80–100%。占比是该档的市场数或笔数，除以这一张表的合计。胜率按市场算，已结束且赚钱才算胜，未结束不进分母。按市场时每个市场只在自己的金额档；按交易时，这一档里有过买入的市场都计入，同一市场可以出现在多档。</p>
       </header>
       <div class="amount-block">
         <h4>按市场</h4>
@@ -812,8 +821,8 @@ function render(data, full, view, domain, scroll) {
         <li>市场按 condition 计算。一场比赛拆成胜、平、负时，会计成三个市场。</li>
         <li>领域只取 Gamma 事件上的标签，并且只分成五类。政治包含政治、国际、地缘政治、选举；加密、天气、体育各自单独一类。其余都归入其他。不使用市场自己的标签。</li>
         <li>市场领域上面的标签，或领域栏里的一行，都会切换查看范围。页头的成交、市场、时间范围，以及下面的买入、持仓、盈亏、价格分布、金额分布和前十名，都只重算这个领域。盈利占比和成交占比的分母换成这个领域自己的合计。再点一次，或点「全部」，回到全部领域。注册日期不随领域变化。领域栏本身始终按全部领域计算。</li>
-        <li>买入价格分布只统计买入。价格每 0.20 一档：小于 0.20，然后 0.20–0.40、0.40–0.60，以此类推。正好等于分界价格时归入下一档，1.00 仍算在 0.80–1.00。金额是价格 × 份额，占比的分母是当前范围内全部买入金额。</li>
-        <li>买入金额分布只统计买入，卖出不计入。市场按该市场全部买入合计，交易按每一笔买入。两张表各自用当前范围内的最大买入金额做 100%，每 20% 一档。正好等于 20%、40%、60%、80% 时归入下一档，最大的一笔留在 80–100%。没有买入的市场不计入市场数。</li>
+        <li>买入价格分布只统计买入。价格每 0.20 一档：小于 0.20，然后 0.20–0.40、0.40–0.60，以此类推。正好等于分界价格时归入下一档，1.00 仍算在 0.80–1.00。金额是价格 × 份额，占比的分母是当前范围内全部买入金额。胜率按市场算：这一档里有过买入的市场里，已结束且赚钱的占比。未结束不进分母。同一市场的买入落在多档时，每一档都计入。</li>
+        <li>买入金额分布只统计买入，卖出不计入。市场按该市场全部买入合计，交易按每一笔买入。两张表各自用当前范围内的最大买入金额做 100%，每 20% 一档。正好等于 20%、40%、60%、80% 时归入下一档，最大的一笔留在 80–100%。没有买入的市场不计入市场数。胜率口径与价格分布相同。按市场时，市场只在自己的金额档里；按交易时，这一档里有过买入的市场计入该档。</li>
         <li>填写「单笔成交大于」后，只保留至少有一笔成交金额大于该数值的市场。金额是价格 × 份额，买入和卖出都算。只要有一笔达标，这个市场里的全部成交都计入。等于该数值不算。清除或留空后恢复全部市场。</li>
         <li>持有时长里，卖出视为离场；结算时还没卖掉的份额，用结算时间离场。未结算的持仓不计入平均。</li>
         <li>持有至结算要求：该市场已结算，窗口内有买入，且从第一笔买入到结算时刻没有出现任何卖出。卖掉一部分也算卖出。</li>
