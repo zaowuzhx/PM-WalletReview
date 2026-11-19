@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buyAmountBuckets,
   buyPriceBuckets,
+  priceExpectation,
   computeReport,
   domainForMarket,
   tradesAboveNotional,
@@ -118,6 +119,64 @@ test("price band average is weighted by shares", () => {
   const empty = rows.find((row) => row.label === "0.20–0.40");
   assert.ok(Math.abs(low.avgPrice - 0.1375) < 1e-9);
   assert.equal(empty.avgPrice, null);
+});
+
+test("each price band splits its own buys into 20 percent amount bands", () => {
+  const trades = [
+    { conditionId: "A", side: "BUY", price: 0.5, size: 10 },
+    { conditionId: "A", side: "BUY", price: 0.5, size: 20 },
+    { conditionId: "B", side: "BUY", price: 0.5, size: 100 },
+    { conditionId: "C", side: "BUY", price: 0.1, size: 200 },
+    { conditionId: "D", side: "SELL", price: 0.5, size: 1000 },
+  ];
+  const rows = buyPriceBuckets(trades, new Map([
+    ["a", { decided: true, win: true }],
+    ["b", { decided: true, win: false }],
+    ["c", { decided: false, win: false }],
+  ]));
+  const mid = new Map(rows.find((row) => row.label === "0.40–0.60").amounts.map((row) => [row.label, row]));
+  const low = new Map(rows.find((row) => row.label === "小于 0.20").amounts.map((row) => [row.label, row]));
+  assert.equal(mid.get("0–20%").count, 1);
+  assert.ok(Math.abs(mid.get("0–20%").avgAmount - 5) < 1e-9);
+  assert.equal(mid.get("20–40%").count, 1);
+  assert.equal(mid.get("80–100%").count, 1);
+  assert.ok(Math.abs(mid.get("80–100%").to - 50) < 1e-9);
+  assert.equal(mid.get("80–100%").markets, 1);
+  assert.equal(mid.get("80–100%").wins, 0);
+  assert.equal(mid.get("0–20%").wins, 1);
+  assert.equal(low.get("80–100%").count, 1);
+  assert.ok(Math.abs(low.get("80–100%").to - 20) < 1e-9);
+  assert.equal(low.get("0–20%").count, 0);
+  assert.equal(low.get("80–100%").decided, 0);
+  assert.equal(low.get("80–100%").expectation, null);
+  assert.ok(Math.abs(mid.get("0–20%").expectation - 0.5) < 1e-9);
+  assert.ok(Math.abs(mid.get("80–100%").expectation - -0.5) < 1e-9);
+  const midShare = rows.find((row) => row.label === "0.40–0.60").amounts.reduce((sum, row) => sum + row.share, 0);
+  assert.ok(Math.abs(midShare - 1) < 1e-9);
+});
+
+test("expectation uses average price and win rate", () => {
+  const avgPrice = 0.9021;
+  const winRate = 0.907;
+  assert.ok(Math.abs(priceExpectation(avgPrice, winRate) - 0.0049) < 1e-12);
+  assert.equal(priceExpectation(null, winRate), null);
+  assert.equal(priceExpectation(avgPrice, null), null);
+  const rows = buyPriceBuckets([
+    { conditionId: "A", side: "BUY", price: avgPrice, size: 1 },
+  ], new Map([["a", { decided: true, win: true }]]));
+  const band = rows.find((row) => row.count === 1);
+  assert.ok(Math.abs(band.expectation - (1 - avgPrice)) < 1e-12);
+  const amounts = buyAmountBuckets([
+    { conditionId: "A", side: "BUY", price: 0.8, size: 10 },
+    { conditionId: "B", side: "BUY", price: 0.4, size: 10 },
+  ], new Map([
+    ["a", { decided: true, win: true }],
+    ["b", { decided: true, win: false }],
+  ]));
+  const high = amounts.trades.find((row) => row.label === "80–100%");
+  assert.ok(Math.abs(high.avgPrice - 0.8) < 1e-12);
+  assert.ok(Math.abs(high.expectation - ((1 - 0.8) * 1 - 0.8 * 0)) < 1e-12);
+  assert.equal(amounts.markets.find((row) => row.count === 0).expectation, null);
 });
 
 test("buy amount bands are 20 percent of the largest buy", () => {
