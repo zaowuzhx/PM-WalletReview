@@ -12,7 +12,7 @@ const example = document.querySelector("#example");
 let controller = null;
 let currentData = null;
 let fullStats = null;
-let selectedDomain = null;
+let selectedDomains = [];
 let minNotional = null;
 let windowDays = null;
 const TIME_WINDOWS = [30, 60, 90, 180];
@@ -350,12 +350,12 @@ function tradeWindow(trades) {
   return { from, to, tradeCount: trades.length };
 }
 
-function viewFor(domain) {
+function viewFor(domains) {
   const timed = tradesWithinDays(currentData.trades, windowDays);
   const universe = tradesAboveNotional(timed, minNotional);
   const filtered = minNotional > 0 || windowDays > 0;
   const full = filtered ? computeReport(universe, currentData.marketInfo) : fullStats;
-  if (domain == null) {
+  if (!domains.length) {
     if (!filtered) {
       return {
         stats: fullStats,
@@ -367,7 +367,8 @@ function viewFor(domain) {
     }
     return { stats: full, full, ...tradeWindow(universe) };
   }
-  const trades = universe.filter((trade) => marketDomain(currentData.marketInfo, trade.conditionId) === domain);
+  const chosen = new Set(domains);
+  const trades = universe.filter((trade) => chosen.has(marketDomain(currentData.marketInfo, trade.conditionId)));
   return { stats: computeReport(trades, currentData.marketInfo), full, ...tradeWindow(trades) };
 }
 
@@ -404,18 +405,20 @@ function applyMinNotional() {
 function showView(scroll) {
   if (!currentData || !fullStats) return;
   const savedY = window.scrollY;
-  let view = viewFor(selectedDomain);
-  if (selectedDomain != null && !view.full.categories.some((item) => item.name === selectedDomain)) {
-    selectedDomain = null;
-    view = viewFor(null);
+  let view = viewFor(selectedDomains);
+  const available = new Set(view.full.categories.map((item) => item.name));
+  const kept = selectedDomains.filter((name) => available.has(name));
+  if (kept.length !== selectedDomains.length) {
+    selectedDomains = kept;
+    view = viewFor(selectedDomains);
   }
-  render(currentData, view.full, view, selectedDomain, scroll);
+  render(currentData, view.full, view, selectedDomains, scroll);
   if (!scroll) window.scrollTo(0, savedY);
 }
 
 function renderPerformance(data, stats, domain) {
   const perf = stats.performance;
-  const scoped = domain != null;
+  const scoped = domain.length > 0;
   const registeredDays = elapsedDays(data.createdAt);
   const firstAge = perf.firstTradeAt == null ? null : Math.max(0, Date.now() / 1000 - perf.firstTradeAt);
   const trades = tradesByCondition();
@@ -435,7 +438,7 @@ function renderPerformance(data, stats, domain) {
         <header>
           <h3>账户与活跃</h3>
           <p>${scoped
-            ? `注册日期来自整个账户，不随领域变化。活跃按北京时间，只统计这个领域${data.hasMore ? "，并且只在最近 5,000 笔之内" : ""}。`
+            ? `注册日期来自整个账户，不随领域变化。活跃按北京时间，只统计所选领域${data.hasMore ? "，并且只在最近 5,000 笔之内" : ""}。`
             : `注册日期来自账户资料。活跃按北京时间，当天至少有一笔买入或卖出。${data.hasMore ? "活跃天数和首次成交只统计最近 5,000 笔。" : ""}`}${windowDays > 0 ? `活跃和首次成交只看最近 ${windowDays} 天。` : ""}${minNotional > 0 ? `活跃和首次成交只看单笔买入大于 ${money.format(minNotional)} 的成交。` : ""}</p>
         </header>
         <div class="split three">
@@ -453,9 +456,9 @@ function renderPerformance(data, stats, domain) {
             <span class="label">首次成交距今</span>
             <strong class="num date">${formatDuration(firstAge)}</strong>
             <p class="muted">${windowDays > 0
-              ? `最近 ${windowDays} 天里${scoped ? "，这个领域" : ""}最早的一笔`
+              ? `最近 ${windowDays} 天里${scoped ? "，所选领域" : ""}最早的一笔`
               : scoped
-                ? (data.hasMore ? "最近 5,000 笔里，这个领域最早的一笔" : "这个领域的第一笔成交")
+                ? (data.hasMore ? "最近 5,000 笔里，所选领域最早的一笔" : "所选领域的第一笔成交")
                 : (data.hasMore ? "这 5,000 笔里最早的一笔" : "第一笔成交")}</p>
           </div>
         </div>
@@ -464,7 +467,7 @@ function renderPerformance(data, stats, domain) {
       <article class="panel wide rank-panel" data-rank="winners" data-open-id="" data-trade-index="0">
         <header>
           <h3>盈利最多的 10 个市场</h3>
-          <p>按已结束市场的盈利金额排序。比例的分母是${scoped ? "这个领域的全部盈利" : "全部盈利"}，不是净盈亏。平均买入成本是该市场的买入成交额 ÷ 买入份额，保留两位小数。平均持仓天数按份额加权，未结束的份额不算。成交明细默认收起。</p>
+          <p>按已结束市场的盈利金额排序。比例的分母是${scoped ? "所选领域的全部盈利" : "全部盈利"}，不是净盈亏。平均买入成本是该市场的买入成交额 ÷ 买入份额，保留两位小数。平均持仓天数按份额加权，未结束的份额不算。成交明细默认收起。</p>
         </header>
         ${currentWinners.length ? `
           <p class="rank-total">这 ${currentWinners.length.toLocaleString("zh-CN")} 个市场盈利合计 <strong class="${pnlClass(winnerPnl)}">${signedMoney(winnerPnl)}</strong>，占全部盈利 <strong>${percent.format(winnerShare)}</strong>。</p>
@@ -490,7 +493,7 @@ function renderPerformance(data, stats, domain) {
       <article class="panel wide rank-panel" data-rank="volume" data-open-id="" data-trade-index="0">
         <header>
           <h3>成交金额最大的 10 个市场</h3>
-          <p>按买入和卖出的成交额合计排序，未结束的市场也计入。比例的分母是${scoped ? "这个领域全部市场的成交金额" : "全部市场的成交金额"}。盈利只统计已经结束的市场，未结束显示为「未结束」。平均买入成本保留两位小数。平均持仓天数按份额加权，未结束的份额不算。成交明细默认收起。</p>
+          <p>按买入和卖出的成交额合计排序，未结束的市场也计入。比例的分母是${scoped ? "所选领域全部市场的成交金额" : "全部市场的成交金额"}。盈利只统计已经结束的市场，未结束显示为「未结束」。平均买入成本保留两位小数。平均持仓天数按份额加权，未结束的份额不算。成交明细默认收起。</p>
         </header>
         ${currentVolume.length ? `
           <p class="rank-total">这 ${currentVolume.length.toLocaleString("zh-CN")} 个市场成交金额合计 <strong>${money.format(volumeNotional)}</strong>，占全部成交 <strong>${percent.format(volumeShare)}</strong>。</p>
@@ -719,18 +722,19 @@ function renderAmountBuckets(stats) {
   `;
 }
 
-function renderDomainTabs(categories, domain) {
+function renderDomainTabs(categories, domains) {
+  const chosen = new Set(domains);
   const tabs = [
-    `<button type="button" data-domain-all aria-pressed="${domain == null ? "true" : "false"}">全部</button>`,
+    `<button type="button" data-domain-all aria-pressed="${domains.length ? "false" : "true"}">全部</button>`,
     ...categories.map((item, index) => `
-      <button type="button" data-domain-index="${index}" aria-pressed="${domain === item.name ? "true" : "false"}">${escapeHtml(domainLabel(item.name))}</button>
+      <button type="button" data-domain-index="${index}" aria-pressed="${chosen.has(item.name) ? "true" : "false"}">${escapeHtml(domainLabel(item.name))}</button>
     `),
   ];
-  return `<div class="domain-tabs" role="tablist">${tabs.join("")}</div>`;
+  return `<div class="domain-tabs" role="group" aria-label="市场领域">${tabs.join("")}</div>`;
 }
 
-function renderDomain(item, index, domain) {
-  const pressed = domain === item.name;
+function renderDomain(item, index, domains) {
+  const pressed = domains.includes(item.name);
   return `
     <section class="domain">
       <button type="button" class="bar-row" data-domain-index="${index}" aria-pressed="${pressed ? "true" : "false"}" aria-label="${escapeHtml(domainLabel(item.name))}">
@@ -761,8 +765,8 @@ function render(data, full, view, domain, scroll) {
   const windowText = view.from && view.to
     ? `${clock.format(view.from * 1000)} – ${clock.format(view.to * 1000)}（北京时间）`
     : "时间未知";
-  const scoped = domain != null;
-  const scopeName = scoped ? domainLabel(domain) : "";
+  const scoped = domain.length > 0;
+  const scopeName = scoped ? domain.map(domainLabel).join("、") : "";
   const overall = full.performance;
   const overallRate = overall.decided
     ? `${overall.wins.toLocaleString("zh-CN")}/${overall.decided.toLocaleString("zh-CN")}（${percent.format(overall.wins / overall.decided)}）`
@@ -819,10 +823,10 @@ function render(data, full, view, domain, scroll) {
     <section class="panel" id="categories">
       <header>
         <h3>市场领域</h3>
-        <p>一个市场只计一次。占比是该领域的市场数占全部市场。胜率是盈利市场 / 已结束市场，括号里是这个比例；卖出或持有到结算后赚钱才算盈利。总胜率 ${overallRate}。上面的标签决定这一栏以下的统计范围，这一栏本身始终按全部领域计算。点某一行同样可以切换。明细默认收起，每页 ${PAGE_SIZE} 条。</p>
+        <p>一个市场只计一次。占比是该领域的市场数占全部市场。胜率是盈利市场 / 已结束市场，括号里是这个比例；卖出或持有到结算后赚钱才算盈利。总胜率 ${overallRate}。上面的标签可以多选，决定这一栏以下的统计范围，这一栏本身始终按全部领域计算。点某一行同样可以加入或移出。明细默认收起，每页 ${PAGE_SIZE} 条。</p>
       </header>
       <p class="scope-line">${scoped
-        ? `当前只看${escapeHtml(scopeName)}。页头和下面的统计都只含这个领域，占比的分母也是这个领域自己的合计。注册日期仍是整个账户。`
+        ? `当前只看${escapeHtml(scopeName)}。页头和下面的统计都只含所选领域，占比的分母也是所选领域自己的合计。注册日期仍是整个账户。`
         : "当前是全部领域。"}${timeText ? `时间筛选下，只含最近 ${windowDays} 天的成交。` : ""}${amountText ? `金额筛选下，只含单笔买入大于 ${money.format(minNotional)} 的成交。` : ""}</p>
       <div class="bar-row bar-head">
         <span></span>
@@ -906,7 +910,7 @@ function render(data, full, view, domain, scroll) {
         <li>除注册日期外，只使用该地址最近 5,000 笔成交，包含挂单成交。更早的成交不参与其他统计。</li>
         <li>市场按 condition 计算。一场比赛拆成胜、平、负时，会计成三个市场。</li>
         <li>领域只取 Gamma 事件上的标签，并且只分成五类。政治包含政治、国际、地缘政治、选举；加密、天气、体育各自单独一类。其余都归入其他。不使用市场自己的标签。</li>
-        <li>市场领域上面的标签，或领域栏里的一行，都会切换查看范围。页头的成交、市场、时间范围，以及下面的买入、持仓、盈亏、价格分布、金额分布和前十名，都只重算这个领域。盈利占比和成交占比的分母换成这个领域自己的合计。再点一次，或点「全部」，回到全部领域。注册日期不随领域变化。领域栏本身始终按全部领域计算。</li>
+        <li>市场领域上面的标签，或领域栏里的一行，都可以多选。页头的成交、市场、时间范围，以及下面的买入、持仓、盈亏、价格分布、金额分布和前十名，都只重算所选领域。盈利占比和成交占比的分母换成所选领域自己的合计。再点一次移出该领域，点「全部」回到全部领域。注册日期不随领域变化。领域栏本身始终按全部领域计算。</li>
         <li>买入价格分布只统计买入。价格每 0.20 一档：小于 0.20，然后 0.20–0.40、0.40–0.60，以此类推。正好等于分界价格时归入下一档，1.00 仍算在 0.80–1.00。金额是价格 × 份额，占比的分母是当前范围内全部买入金额。均价是该档买入成交额 ÷ 买入份额。胜率按市场算：这一档里有过买入的市场里，已结束且赚钱的占比。未结束不进分母。同一市场的买入落在多档时，每一档都计入。期望 = (1 − 均价) × 胜率 − 均价 × (1 − 胜率)。每个价格带再按其中最大的一笔买入分成五档，每 20% 一档。金额范围是该档的美元区间，均额是其中买入金额合计 ÷ 笔数，笔数占比的分母是这个价格带的买入笔数。正好等于 20%、40%、60%、80% 时归入下一档，最大的一笔留在 80–100%。胜率仍按市场算，同一市场的不同买入可以落在多个金额区间。金额分档的期望用这一档自己的均价和胜率。</li>
         <li>买入金额分布只统计买入，卖出不计入。市场按该市场全部买入合计，交易按每一笔买入。两张表各自用当前范围内的最大买入金额做 100%，每 20% 一档。正好等于 20%、40%、60%、80% 时归入下一档，最大的一笔留在 80–100%。没有买入的市场不计入市场数。均额是该区间买入金额合计 ÷ 市场数或笔数。胜率口径与价格分布相同。期望口径也相同，均价是该区间买入成交额 ÷ 买入份额。按市场时，市场只在自己的金额档里；按交易时，这一档里有过买入的市场计入该档。</li>
         <li>填写「单笔买入大于」后，只保留买入金额大于该数值的成交。金额是价格 × 份额。卖出不计入，同一市场里金额没有超过该数值的买入也不计入。等于该数值不算。清除或留空后恢复全部成交。</li>
@@ -944,7 +948,7 @@ async function analyze(raw, options = {}) {
     showStatus("请输入 Polymarket 地址，或带有 0x 地址的主页链接。", true);
     return;
   }
-  const keepDomain = options.refresh && currentData?.address === address ? selectedDomain : null;
+  const keepDomains = options.refresh && currentData?.address === address ? selectedDomains : [];
   const keepMin = options.refresh && currentData?.address === address ? minNotional : null;
   const keepWindow = options.refresh && currentData?.address === address ? windowDays : null;
   controller?.abort();
@@ -959,9 +963,8 @@ async function analyze(raw, options = {}) {
     showStatus("正在计算…");
     currentData = loaded;
     fullStats = computeReport(loaded.trades, loaded.marketInfo);
-    selectedDomain = keepDomain != null && fullStats.categories.some((item) => item.name === keepDomain)
-      ? keepDomain
-      : null;
+    const available = new Set(fullStats.categories.map((item) => item.name));
+    selectedDomains = keepDomains.filter((name) => available.has(name));
     minNotional = keepMin;
     windowDays = keepWindow;
     showStatus("");
@@ -1008,8 +1011,8 @@ report.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-domain-all]")) {
-    if (selectedDomain != null) {
-      selectedDomain = null;
+    if (selectedDomains.length) {
+      selectedDomains = [];
       showView(false);
     }
     return;
@@ -1018,7 +1021,10 @@ report.addEventListener("click", (event) => {
   if (domainButton) {
     const name = currentCategories[Number(domainButton.dataset.domainIndex)]?.name;
     if (name === undefined) return;
-    selectedDomain = selectedDomain === name ? null : name;
+    const next = new Set(selectedDomains);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    selectedDomains = currentCategories.filter((item) => next.has(item.name)).map((item) => item.name);
     showView(false);
     return;
   }
