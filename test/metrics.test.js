@@ -53,7 +53,7 @@ test("domain comes only from a gamma category tag", () => {
   assert.equal(domainForMarket({ events: [{ tags: [{ slug: "games" }, { slug: "sports" }] }] }), "体育");
 });
 
-test("amount filter keeps only buys larger than the threshold", () => {
+test("amount filter keeps buys inside the lower and upper bounds", () => {
   const trades = [
     { conditionId: "A", side: "BUY", price: 0.5, size: 10 },
     { conditionId: "A", side: "SELL", price: 0.9, size: 10 },
@@ -64,7 +64,10 @@ test("amount filter keeps only buys larger than the threshold", () => {
   const kept = tradesAboveNotional(trades, 4);
   assert.deepEqual(kept.map((trade) => [trade.conditionId, trade.side]), [["A", "BUY"]]);
   assert.equal(tradesAboveNotional(trades, 5).length, 0);
-  assert.equal(tradesAboveNotional(trades, 0), trades);
+  assert.equal(tradesAboveNotional(trades, null), trades);
+  assert.deepEqual(tradesAboveNotional(trades, null, 4).map((trade) => trade.size), [10]);
+  assert.deepEqual(tradesAboveNotional(trades, 1, 5).map((trade) => trade.size), [10, 4]);
+  assert.equal(tradesAboveNotional(trades, 4, 4).length, 0);
 });
 
 test("a time window drops fills outside it and keeps the recent fill in the same market", () => {

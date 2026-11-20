@@ -193,11 +193,19 @@ export function tradesWithinDays(trades, days, nowSeconds = Date.now() / 1000) {
   });
 }
 
-export function tradesAboveNotional(trades, minimum) {
-  if (!(minimum > 0)) return trades;
+export function tradesAboveNotional(trades, minimum, maximum) {
+  const hasMin = minimum != null && Number.isFinite(Number(minimum));
+  const hasMax = maximum != null && Number.isFinite(Number(maximum));
+  if (!hasMin && !hasMax) return trades;
+  const low = hasMin ? Number(minimum) : null;
+  const high = hasMax ? Number(maximum) : null;
   return trades.filter((trade) => {
     if (String(trade.side || "").toUpperCase() !== "BUY") return false;
-    return Number(trade.price) * Number(trade.size) > minimum;
+    const amount = Number(trade.price) * Number(trade.size);
+    if (!Number.isFinite(amount)) return false;
+    if (low != null && !(amount > low)) return false;
+    if (high != null && !(amount < high)) return false;
+    return true;
   });
 }
 
